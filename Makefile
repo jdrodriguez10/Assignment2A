@@ -2,7 +2,7 @@ EFILES= minershell
 
 all: $(EFILES)
 
-minershell: minershell.o
+testshell: minershell.o
 
 clean:
 	rm -f *.o $(EFILES)

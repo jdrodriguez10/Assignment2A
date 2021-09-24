@@ -105,133 +105,8 @@ void io_Redirect(char **tokens,int n){
 }
 
 
-void ex_Background(char **tokens,int n){
-  char **arg_list = (char **)malloc(MAX_NUM_TOKENS * sizeof(char *));
-  int j=0,fork_calls=0;
-
-  for(int i=0;i<n;i++){
-    while(tokens[i]!=NULL && strcmp(tokens[i],"&")!=0 ){
-      arg_list[j] = (char*)malloc(MAX_TOKEN_SIZE*sizeof(char));
-      strcpy(arg_list[j++],tokens[i++]);
-    }
-    arg_list[j]=NULL;
-    fork_calls++;
-    char *tem_env = (char *)malloc(sizeof(char)*150);
-
-    switch (fork()) {
-    case -1:
-      break;
-    case 0:
-      strcpy(tem_env,"/bin/");
-      strcat(tem_env,arg_list[0]);
-      if(execv(tem_env,arg_list)==-1){
-	strcpy(tem_env,"/usr/bin/");
-	strcat(tem_env,arg_list[0]);
-	execv(tem_env,arg_list);
-      }
-      free(tem_env);
-    }
-    j=0;
-  }
-
-  for(int i=0;arg_list[i]!=NULL;i++)
-    free(arg_list[i]);
-
-  free(arg_list);
-}
-
-
-void ex_Serial(char **tokens,int n){
-  char **arg_list = (char **)malloc(MAX_NUM_TOKENS * sizeof(char *));
-  int j=0;
-
-  for(int i=0;i<n;i++){
-    int io_Flag = 0;
-    while(tokens[i]!=NULL && strcmp(tokens[i],"&&")!=0 ){
-      if(!io_Flag)
-	io_Flag=strcmp(tokens[i],">>")==0 || strcmp(tokens[i],">")==0 || strcmp(tokens[i],"<")==0;
-      arg_list[j] = (char*)malloc(MAX_TOKEN_SIZE*sizeof(char));
-      strcpy(arg_list[j++],tokens[i++]);
-    }
-    arg_list[j]=NULL;
-    char *tem_env = (char *)malloc(sizeof(char)*150);
-
-    if(!io_Flag){
-      switch (fork()) {
-      case -1:
-	break;
-      case 0:
-	strcpy(tem_env,"/bin/");
-	strcat(tem_env,arg_list[0]);
-	if(execv(tem_env,arg_list)==-1){
-	  strcpy(tem_env,"/usr/bin/");
-	  strcat(tem_env,arg_list[0]);
-	  execv(tem_env,arg_list);
-	}
-	free(tem_env);
-      }
-    }
-    else {
-      io_Redirect(arg_list,j);
-    }
-    wait(NULL);
-    j=0;
-  }
-
-  for(int i=0;arg_list[i]!=NULL;i++)
-    free(arg_list[i]);
-
-  free(arg_list);
-}
-
-
-void ex_Parallel(char **tokens,int n){
-  char **arg_list = (char **)malloc(MAX_NUM_TOKENS * sizeof(char *));
-  int j=0,fork_calls=0;
-
-  for(int i=0;i<n;i++){
-    int io_Flag = 0;
-    while(tokens[i]!=NULL && strcmp(tokens[i],"&&&")!=0 ){
-      if(!io_Flag)
-	io_Flag=strcmp(tokens[i],">>")==0 || strcmp(tokens[i],">")==0 || strcmp(tokens[i],"<")==0;
-      arg_list[j] = (char*)malloc(MAX_TOKEN_SIZE*sizeof(char));
-      strcpy(arg_list[j++],tokens[i++]);
-    }
-    arg_list[j]=NULL;
-    char *tem_env = (char *)malloc(sizeof(char)*150);
-
-    if(!io_Flag){
-      fork_calls++;
-      switch (fork()) {
-      case -1:
-	break;
-      case 0:
-	strcpy(tem_env,"/bin/");
-	strcat(tem_env,arg_list[0]);
-	if(execv(tem_env,arg_list)==-1){
-	  strcpy(tem_env,"/usr/bin/");
-	  strcat(tem_env,arg_list[0]);
-	  execv(tem_env,arg_list);
-	}
-	free(tem_env);
-      }
-    }
-    else {
-      io_Redirect(arg_list,j);
-    }
-    j=0;
-  }
-
-  for(int i=0;i<fork_calls;i++)
-    wait(NULL);
-
-  for(int i=0;arg_list[i]!=NULL;i++)
-    free(arg_list[i]);
-  free(arg_list);
-}
 /* Splits the string by space and returns the array of tokens
  */
-
 char **tokenize(char *line)
 {
   char **tokens = (char **)malloc(MAX_NUM_TOKENS * sizeof(char *));
@@ -265,12 +140,13 @@ int main(int argc, char* argv[]) {
   char  **tokens;
   int i;
   clock_t t_1;
+  char error_message[30] = "An error has occured\n";
 
   FILE* f_p;
   if(argc == 2) {
     f_p = fopen(argv[1],"r");
     if(f_p < 0) {
-      printf("File doesn't exists.");
+      write(STDERR_FILENO, error_message, strlen(error_message));
       return -1;
     }
   }
@@ -301,28 +177,13 @@ int main(int argc, char* argv[]) {
 
     //do whatever you want with the commands, here we just print them
     for(i=0;tokens[i]!=NULL;i++){
-      if(!prl)
-	prl=strcmp(tokens[i],"&&&")==0;
-
-      if(!srl)
-	srl=strcmp(tokens[i],"&&")==0;
-
-      if(!bg)
-	bg=strcmp(tokens[i],"&")==0;
-
       if(!i_o)
 	i_o=strcmp(tokens[i],">>")==0 || strcmp(tokens[i],">")==0 || strcmp(tokens[i],"<")==0;
 
       // printf("found token %s (remove this debug output later)\n", tokens[i]);
     }
     t_1 = clock();
-    if(prl)
-      ex_Parallel(tokens,i);
-    else if(srl)
-      ex_Serial(tokens,i);
-    else if(bg)
-      ex_Background(tokens,i);
-    else if(i_o)
+    if(i_o)
       io_Redirect(tokens,i);
     else {
       if(!strcmp(tokens[0],"dir")){
