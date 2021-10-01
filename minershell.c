@@ -12,11 +12,13 @@
 extern char **environ;
 
 
+//Exits the shell where it is currently running
 void func_Exit(){
   exit(0);
 }
 
 
+//Displays the current environment
 void func_Env(){
   int i;
   for (i = 0; environ[i] != NULL; i++)
@@ -24,17 +26,20 @@ void func_Env(){
 }
 
 
+//Clears the terminal screen
 void func_Clear(){
   printf("\e[1;1H\e[2J");
 }
 
 
+//List the contents of a directory
 void func_Dir(char **tokens){
   char a[150]="ls -la ";
   system(strcat(a,tokens[1]));
 }
 
 
+//Prints the full name of the current working directory
 void func_Pwd(){
   char *tem_env = (char *)malloc(sizeof(char)*150);
   getcwd(tem_env,150);
@@ -43,6 +48,7 @@ void func_Pwd(){
 }
 
 
+//Used to change the current working directory
 void func_Cd(char *fpath){
   char *tem_env = (char *)malloc(sizeof(char)*150);
   getcwd(tem_env,150);
@@ -59,12 +65,12 @@ void func_Cd(char *fpath){
   }
   else
     setenv("OLDPWD",tem_env,1);
-
   printf("AFTER:\nOLDPWD=%s\nPWD=%s\n",getenv("OLDPWD"),getenv("PWD"));
   free(tem_env);
 }
 
 
+//Used to divert the input or output
 void io_Redirect(char **tokens,int n){
   FILE *f_p;
   char **arg_list = (char **)malloc(MAX_NUM_TOKENS * sizeof(char *));
@@ -97,16 +103,58 @@ void io_Redirect(char **tokens,int n){
     free(tem_env);
   }
   wait(NULL);
-
   for(int i=0;arg_list[i]!=NULL;i++)
     free(arg_list[i]);
-
   free(arg_list);
 }
 
 
-/* Splits the string by space and returns the array of tokens
- */
+//Used to run multiple commands at the same time
+void ex_Parallel(char **tokens,int n){
+  char **arg_list = (char **)malloc(MAX_NUM_TOKENS * sizeof(char *));
+  int j=0,fork_calls=0;
+
+  for(int i=0;i<n;i++){
+    int io_Flag = 0;
+    while(tokens[i]!=NULL && strcmp(tokens[i],"&&&")!=0 ){
+      if(!io_Flag)
+	io_Flag=strcmp(tokens[i],">>")==0 || strcmp(tokens[i],">")==0 || strcmp(tokens[i],"<")==0;
+      arg_list[j] = (char*)malloc(MAX_TOKEN_SIZE*sizeof(char));
+      strcpy(arg_list[j++],tokens[i++]);
+    }
+    arg_list[j]=NULL;
+    char *tem_env = (char *)malloc(sizeof(char)*150);
+
+    if(!io_Flag){
+      fork_calls++;
+      switch (fork()) {
+      case -1:
+	break;
+      case 0:
+	strcpy(tem_env,"/bin/");
+	strcat(tem_env,arg_list[0]);
+	if(execv(tem_env,arg_list)==-1){
+	  strcpy(tem_env,"/usr/bin/");
+	  strcat(tem_env,arg_list[0]);
+	  execv(tem_env,arg_list);
+	}
+	free(tem_env);
+      }
+    }
+    else {
+      io_Redirect(arg_list,j);
+    }
+    j=0;
+  }
+  for(int i=0;i<fork_calls;i++)
+    wait(NULL);
+  for(int i=0;arg_list[i]!=NULL;i++)
+    free(arg_list[i]);
+  free(arg_list);
+}
+
+
+// Splits the string by space and returns the array of tokens
 char **tokenize(char *line)
 {
   char **tokens = (char **)malloc(MAX_NUM_TOKENS * sizeof(char *));
@@ -114,7 +162,6 @@ char **tokenize(char *line)
   int i, tokenIndex = 0, tokenNo = 0;
 
   for(i =0; i < strlen(line); i++){
-
     char readChar = line[i];
 
     if (readChar == ' ' || readChar == '\n' || readChar == '\t'){
@@ -128,7 +175,6 @@ char **tokenize(char *line)
       token[tokenIndex++] = readChar;
     }
   }
-
   free(token);
   tokens[tokenNo] = NULL ;
   return tokens;
@@ -179,11 +225,16 @@ int main(int argc, char* argv[]) {
     for(i=0;tokens[i]!=NULL;i++){
       if(!i_o)
 	i_o=strcmp(tokens[i],">>")==0 || strcmp(tokens[i],">")==0 || strcmp(tokens[i],"<")==0;
+      
+      if(!prl)
+	prl=strcmp(tokens[i],"&&&")==0;
 
       // printf("found token %s (remove this debug output later)\n", tokens[i]);
     }
     t_1 = clock();
-    if(i_o)
+    if(prl)
+      ex_Parallel(tokens,i);
+    else if(i_o)
       io_Redirect(tokens,i);
     else {
       if(!strcmp(tokens[0],"dir")){
